@@ -1,132 +1,43 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace CQRS_EventSourcing
 {
     class Program
     {
-        public class Person
-        {
-            EventBroker broker;
-            private int age;
-
-            public Person(EventBroker broker)
-            {
-                this.broker = broker;
-                broker.Commands += BrokerOnCommands;
-                broker.Queries += Broker_Queries;
-            }
-
-            private void Broker_Queries(object sender, Query e)
-            {
-                var q = e as AgeQuery;
-                if (q != null && q.Target == this)
-                {
-                    q.Result = age;
-                }
-            }
-
-            private void BrokerOnCommands(object sender, Command e)
-            {
-                var cac = e as ChangeAgeCommand;
-                if (cac != null && cac.Target == this)
-                {
-                    if (cac.Registred)
-                    {
-                        broker.AllEvents.Add(new AgeChangedEvent(this, age, cac.Age));
-                    }
-                    age = cac.Age;
-                }
-            }
-        }
-
-        public class EventBroker
-        {
-            //1. All events 2. Commands 3. Queries
-            public IList<Event> AllEvents = new List<Event>();
-            public event EventHandler<Command> Commands;
-            public event EventHandler<Query> Queries;
-
-            public void Command(Command c)
-            {
-                Commands?.Invoke(this, c);
-            }
-
-            public T Query<T>(Query q)
-            {
-                Queries?.Invoke(this, q);
-                return (T)q.Result;
-            }
-
-            public void UndoLast()
-            {
-                var e = AllEvents.LastOrDefault();
-                var ac = e as AgeChangedEvent;
-                if (ac != null)
-                {
-                    Command(new ChangeAgeCommand(ac.Target, ac.OldAge) { Registred = false });
-                    AllEvents.Remove(e);
-                }
-            }
-        }
-
-
-        public class ChangeAgeCommand : Command
-        {
-            public Person Target;
-            public int Age;
-
-            public ChangeAgeCommand(Person target, int age)
-            {
-                Target = target;
-                Age = age;
-            }
-        }
-
-        public class Query
-        {
-            public object Result;
-        }
-
-        public class AgeQuery : Query
-        {
-            public Person Target;
-        }
-
-        public class Command : EventArgs
-        {
-            public bool Registred = true;
-        }
-
-        public class Event
-        {
-
-        }
-
-        public class AgeChangedEvent : Event
-        {
-            public Person Target;
-            public int OldAge, NewAge;
-
-            public AgeChangedEvent(Person target, int oldAge, int newAge)
-            {
-                Target = target;
-                OldAge = oldAge;
-                NewAge = newAge;
-            }
-
-            public override string ToString()
-            {
-                return $"Age changed from {OldAge} to {NewAge}";
-            }
-        }
-
         static void Main(string[] args)
         {
             var eb = new EventBroker();
             var p = new Person(eb);
 
+            Console.WriteLine("About to change Age...");
+            MakeChangesToAge(eb, p);
+
+            Console.WriteLine("About to check last value of Age...");
+            CheckLastValueOfAge(eb, p);
+
+            Console.WriteLine("About to undo last set value to Age...");
+            UndoLastSetValueToAge(eb, p);
+
+            Console.ReadKey();
+        }
+
+        private static void UndoLastSetValueToAge(EventBroker eb, Person p)
+        {
+            eb.UndoLast();
+            int age = eb.Query<int>(new AgeQuery { Target = p });
+            Console.WriteLine($"Undone the changes of age. Age is now: {age}");
+        }
+
+        private static void CheckLastValueOfAge(EventBroker eb, Person p)
+        {
+            int age = eb.Query<int>(new AgeQuery { Target = p });
+            Console.WriteLine($"The last Age to be set is: {age}");
+
+            Console.WriteLine("\n-----------------------------------\n");
+        }
+
+        private static void MakeChangesToAge(EventBroker eb, Person p)
+        {
             eb.Command(new ChangeAgeCommand(p, 123));
             eb.Command(new ChangeAgeCommand(p, 55));
             eb.Command(new ChangeAgeCommand(p, 21));
@@ -138,16 +49,7 @@ namespace CQRS_EventSourcing
                 Console.WriteLine(e);
             }
 
-            int age = eb.Query<int>(new AgeQuery { Target = p });
-
-            Console.WriteLine(age);
-
-            eb.UndoLast();
-
-            age = eb.Query<int>(new AgeQuery { Target = p });
-            Console.WriteLine(age);
-
-            Console.ReadKey();
+            Console.WriteLine("\n-----------------------------------\n");
         }
     }
 }
